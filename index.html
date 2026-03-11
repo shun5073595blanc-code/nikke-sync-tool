@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NIKKE シンクロレベル計算</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #111;
+        color: #f5f5f5;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      h1, h2, h3 {
+        margin-top: 0;
+      }
+
+      .card {
+        background: #1b1b1b;
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      label {
+        font-size: 14px;
+      }
+
+      input, select, button {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #555;
+        background: #222;
+        color: #fff;
+      }
+
+      button {
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 12px;
+      }
+
+      .description {
+        font-size: 13px;
+        color: #ccc;
+        line-height: 1.5;
+        margin-top: 8px;
+      }
+
+      .error {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 8px;
+        background: #4a1f1f;
+        border: 1px solid #7a2c2c;
+        white-space: pre-wrap;
+      }
+
+      .summary {
+        margin-top: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        background: #16202a;
+        border: 1px solid #2f4d68;
+        line-height: 1.8;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .basic-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .resource-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+      }
+
+      .resource-table th,
+      .resource-table td {
+        border: 1px solid #333;
+        padding: 10px;
+        text-align: center;
+      }
+
+      .resource-table th:first-child,
+      .resource-table td:first-child {
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      .resource-table input {
+        width: 100%;
+      }
+
+      .result-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background: #1b1b1b;
+      }
+
+      .result-table th,
+      .result-table td {
+        border-bottom: 1px solid #333;
+        padding: 10px;
+        text-align: right;
+        font-size: 14px;
+        white-space: nowrap;
+      }
+
+      .result-table th:first-child,
+      .result-table td:first-child {
+        text-align: left;
+      }
+
+      @media (max-width: 1000px) {
+        .basic-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .row {
+          grid-template-columns: 1fr;
+        }
+
+        .resource-table,
+        .result-table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+
+      .shop-category-block {
+        margin-top: 16px;
+      }
+
+      .shop-category-block h3 {
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      .shop-item-row {
+        display: grid;
+        grid-template-columns: 24px 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 10px 0;
+        border-bottom: 1px solid #333;
+        cursor: pointer;
+      }
+
+      .shop-item-row input {
+        margin-top: 3px;
+      }
+
+      .shop-item-content {
+        display: grid;
+        gap: 4px;
+      }
+
+      .shop-item-name {
+        font-weight: 700;
+      }
+
+      .shop-item-reward {
+        font-size: 13px;
+        color: #ccc;
+        line-height: 1.5;
+      }
+      .section-title-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: nowrap;
+        margin-bottom: 0;
+      }
+
+      .section-title-check input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 auto;
+        margin: 0;
+      }
+
+      .section-title-text {
+        margin: 0;
+        font-size: 1.5em;
+        line-height: 1.2;
+      }
+
+      .inline-toggle-link {
+        display: inline-block;
+        margin-top: 8px;
+        font-size: 13px;
+        color: #9ecbff;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .inline-toggle-link:hover {
+        text-decoration: underline;
+      }
+
+      .collapsible-content.hidden {
+        display: none;
+      }
+
+      @media (max-width: 1000px) {
+        .basic-grid.basic-grid-compact .row {
+          grid-template-columns: 220px minmax(0, 160px);
+        }
+      }
+
+      .details-block {
+        border: 1px solid #333;
+        border-radius: 10px;
+        background: #161616;
+        overflow: hidden;
+      }
+
+      .details-block + .details-block {
+        margin-top: 12px;
+      }
+
+      .details-summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 14px 16px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        user-select: none;
+      }
+
+      .details-summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .details-summary::before {
+        content: "▶";
+        font-size: 12px;
+        color: #9ecbff;
+        transition: transform 0.15s ease;
+      }
+
+      details[open] > .details-summary::before {
+        transform: rotate(90deg);
+      }
+
+      .details-content {
+        padding: 0 16px 16px;
+      }
+
+      .details-content > .row:first-child,
+      .details-content > .resource-table:first-child,
+      .details-content > .shop-category-block:first-child {
+        margin-top: 4px;
+      }
+
+      .nested-details {
+        margin-top: 12px;
+        border-top: 1px solid #2e2e2e;
+        padding-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>NIKKE シンクロレベル計算</h1>
+
+      <div class="basic-grid">
+        <section class="card">
+          <h2>基本</h2>
+          <div class="row">
+            <label for="currentSyncLevel">現在のシンクロレベル</label>
+            <input id="currentSyncLevel" type="number" min="1" step="1" />
+          </div>
+          <div class="row">
+            <label for="targetSyncLevel">目標のシンクロレベル</label>
+            <input id="targetSyncLevel" type="number" min="1" step="1" />
+          </div>
+          <div class="row">
+            <label for="baseDefenseLevel">基地防衛レベル</label>
+            <input id="baseDefenseLevel" type="number" min="1" step="1" />
+          </div>
+          <div class="row">
+            <label for="wipeoutCount">まとめて殲滅</label>
+            <select id="wipeoutCount">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+            </select>
+          </div>
+        </section>
+      </div>
+
+      <section class="card">
+        <details class="details-block" open>
+          <summary class="details-summary">保有素材</summary>
+          <div class="details-content">
+            <table class="resource-table">
+              <thead>
+                <tr>
+                  <th>入力項目</th>
+                  <th>バトルデータ</th>
+                  <th>クレジット</th>
+                  <th>コアダスト</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>保有素材</td>
+                  <td><input id="ownedDirectBattleData" type="number" min="0" step="1" /></td>
+                  <td><input id="ownedDirectCredit" type="number" min="0" step="1" /></td>
+                  <td><input id="ownedDirectCoreDust" type="number" min="0" step="1" /></td>
+                </tr>
+                <tr>
+                  <td>ケース（1時間）</td>
+                  <td><input id="battleDataCase1h" type="number" min="0" step="1" /></td>
+                  <td><input id="creditCase1h" type="number" min="0" step="1" /></td>
+                  <td><input id="coreDustCase1h" type="number" min="0" step="1" /></td>
+                </tr>
+                <tr>
+                  <td>ケース（2時間）</td>
+                  <td><input id="battleDataCase2h" type="number" min="0" step="1" /></td>
+                  <td><input id="creditCase2h" type="number" min="0" step="1" /></td>
+                  <td><input id="coreDustCase2h" type="number" min="0" step="1" /></td>
+                </tr>
+                <tr>
+                  <td>ケース（4時間）</td>
+                  <td><input id="battleDataCase4h" type="number" min="0" step="1" /></td>
+                  <td><input id="creditCase4h" type="number" min="0" step="1" /></td>
+                  <td><input id="coreDustCase4h" type="number" min="0" step="1" /></td>
+                </tr>
+                <tr>
+                  <td>ケース（8時間）</td>
+                  <td><input id="battleDataCase8h" type="number" min="0" step="1" /></td>
+                  <td><input id="creditCase8h" type="number" min="0" step="1" /></td>
+                  <td><input id="coreDustCase8h" type="number" min="0" step="1" /></td>
+                </tr>
+                <tr>
+                  <td>ケース（12時間）</td>
+                  <td><input id="battleDataCase12h" type="number" min="0" step="1" /></td>
+                  <td><input id="creditCase12h" type="number" min="0" step="1" /></td>
+                  <td><input id="coreDustCase12h" type="number" min="0" step="1" /></td>
+                </tr>
+                <tr>
+                  <td>ケース（24時間）</td>
+                  <td><input id="battleDataCase24h" type="number" min="0" step="1" /></td>
+                  <td><input id="creditCase24h" type="number" min="0" step="1" /></td>
+                  <td><input id="coreDustCase24h" type="number" min="0" step="1" /></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <section class="card">
+        <div class="section-title-check">
+          <input id="enableDailyPlayReward" type="checkbox" />
+          <h2 class="section-title-text">デイリープレイ報酬</h2>
+        </div>
+
+        <div
+          class="inline-toggle-link"
+          data-toggle-target="dailyPlayRewardDescription"
+        >
+          デイリープレイ報酬について＞
+        </div>
+
+        <div
+          id="dailyPlayRewardDescription"
+          class="description collapsible-content hidden"
+        ></div>
+      </section>
+
+      <section class="card">
+        <div class="section-title-check">
+          <input id="enableGrowthSupplyBox" type="checkbox" />
+          <h2 class="section-title-text">30-day成長補給箱</h2>
+        </div>
+
+        <div
+          class="inline-toggle-link"
+          data-toggle-target="growthSupplyBoxDescription"
+        >
+          30-day成長補給箱について＞
+        </div>
+
+        <div
+          id="growthSupplyBoxDescription"
+          class="description collapsible-content hidden"
+        >
+          補給箱は 1日1回分として扱います。<br />
+          fixed は指定素材へ固定配分、days_priority はその時点で最も到達日数が長い素材へ配分します。<br />
+          クレジット30時間分、バトルデータ10時間分、コアダスト10時間分のいずれか1つを選択して獲得します。
+        </div>
+
+        <div id="growthSupplyBoxConfig" class="hidden">
+          <div class="row">
+            <label for="growthSupplyBoxMode">使用方法</label>
+            <select id="growthSupplyBoxMode">
+              <option value="fixed">選択した素材に固定</option>
+              <option value="days_priority">到達日数が最も長い素材へ配分</option>
+            </select>
+          </div>
+
+          <div id="growthSupplyBoxFixedTargetRow" class="row">
+            <label for="growthSupplyBoxFixedTarget">固定対象素材</label>
+            <select id="growthSupplyBoxFixedTarget">
+              <option value="battle_data">バトルデータ</option>
+              <option value="credit">クレジット</option>
+              <option value="core_dust">コアダスト</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <details class="details-block">
+          <summary class="details-summary">課金商品</summary>
+          <div class="details-content">
+            <div class="description">
+              対象商品をチェックしてください。各商品は1回購入前提です。
+            </div>
+            <div id="shopItemsContainer"></div>
+          </div>
+        </details>
+      </section>
+
+      <div class="actions">
+        <button id="calculateButton" type="button">計算する</button>
+      </div>
+
+      <div id="errorBox" class="error hidden"></div>
+
+      <table id="resultTable" class="result-table hidden">
+        <thead>
+          <tr>
+            <th>素材</th>
+            <th>到達までの期間</th>
+            <th>30-day成長補給箱</th>
+          </tr>
+        </thead>
+        <tbody id="resultTableBody"></tbody>
+      </table>
+
+      <div id="summaryBox" class="summary hidden"></div>
+
+      <br>
+      <div class="card">
+        <h2>計算ログ</h2>
+        <pre id="debugBox"></pre>
+      </div>
+    </div>
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>
