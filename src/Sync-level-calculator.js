@@ -74,6 +74,7 @@ export function createDefaultSyncLevelPlanInput() {
             enabled: false,
             mode: "fixed",
             fixedTarget: "core_dust",
+            initialStock: 0,
         },
         selectedShopItemIds: [],
     };
@@ -214,6 +215,26 @@ export function validateInput(input, masterData) {
     }
     errors.push(...validateMaterialMap(input.ownedDirectMaterials, "ownedDirectMaterials"));
     errors.push(...validateMaterialCaseCountMap(input.ownedCaseCounts, "ownedCaseCounts"));
+    if (!validateFiniteNumber(input.growthSupplyBox.initialStock)) {
+        errors.push({
+            field: "growthSupplyBox.initialStock",
+            message: "保持中の30-day成長補給箱数は有限数である必要があります",
+        });
+    }
+    else {
+        if (!Number.isInteger(input.growthSupplyBox.initialStock)) {
+            errors.push({
+                field: "growthSupplyBox.initialStock",
+                message: "保持中の30-day成長補給箱数は整数である必要があります",
+            });
+        }
+        if (input.growthSupplyBox.initialStock < 0) {
+            errors.push({
+                field: "growthSupplyBox.initialStock",
+                message: "保持中の30-day成長補給箱数は0以上である必要があります",
+            });
+        }
+    }
     const baseDefenseRow = masterData.baseDefenseIncome.find((row) => row.level === input.baseDefenseLevel);
     if (!baseDefenseRow) {
         errors.push({
@@ -305,6 +326,29 @@ function calculateSingleGoalDayInfo(remaining, totalDaily) {
         reachable: true,
     };
 }
+function getGrowthSupplyBoxGainByMaterial(autoIncomePerHour, material) {
+    const gain = createEmptyMaterialMap();
+    gain[material] =
+        autoIncomePerHour[material] * GROWTH_SUPPLY_BOX_HOURS_CHOICES[material];
+    return gain;
+}
+function calculateOverallGoalDaysFromState(remaining, totalDaily) {
+    const dayInfo = calculateDaysToGoal(remaining, totalDaily);
+    const unreachable = MATERIAL_KEYS.some((material) => !dayInfo[material].reachable);
+    if (unreachable) {
+        return null;
+    }
+    return Math.max(...MATERIAL_KEYS.map((material) => dayInfo[material].days ?? 0));
+}
+function compareGrowthSupplyBoxActionPriority(a, b) {
+    const order = [
+        "core_dust",
+        "credit",
+        "battle_data",
+        "unused",
+    ];
+    return order.indexOf(a) - order.indexOf(b);
+}
 export function calculateGrowthSupplyBoxDaily(input, remaining, autoIncomePerHour, provisionalTotalDaily) {
     if (!input.enabled) {
         return {
@@ -315,36 +359,166 @@ export function calculateGrowthSupplyBoxDaily(input, remaining, autoIncomePerHou
                 selectedMaterial: null,
                 addedHours: 0,
                 addedMaterials: 0,
+                initialStock: input.initialStock,
+                usedCountByMaterial: {
+                    battle_data: 0,
+                    credit: 0,
+                    core_dust: 0,
+                },
+                allocationSummary: {
+                    battle_data: 0,
+                    credit: 0,
+                    core_dust: 0,
+                    unused: input.initialStock,
+                },
+                dailyLog: [],
             },
         };
     }
-    const selectedMaterial = input.mode === "fixed"
-        ? input.fixedTarget
-        : findMaterialWithLongestDays(remaining, provisionalTotalDaily);
-    if (selectedMaterial == null) {
+    if (input.mode === "fixed") {
+        const selectedMaterial = input.fixedTarget;
+        const addedHours = GROWTH_SUPPLY_BOX_HOURS_CHOICES[selectedMaterial];
+        const addedMaterials = addedHours * autoIncomePerHour[selectedMaterial];
+        const daily = createEmptyMaterialMap();
+        daily[selectedMaterial] = addedMaterials;
         return {
-            daily: createEmptyMaterialMap(),
+            daily,
             result: {
                 enabled: true,
                 mode: input.mode,
-                selectedMaterial: null,
-                addedHours: 0,
-                addedMaterials: 0,
+                selectedMaterial,
+                addedHours,
+                addedMaterials,
+                initialStock: input.initialStock,
+                usedCountByMaterial: {
+                    battle_data: selectedMaterial === "battle_data" ? 1 : 0,
+                    credit: selectedMaterial === "credit" ? 1 : 0,
+                    core_dust: selectedMaterial === "core_dust" ? 1 : 0,
+                },
+                allocationSummary: {
+                    battle_data: selectedMaterial === "battle_data" ? 1 : 0,
+                    credit: selectedMaterial === "credit" ? 1 : 0,
+                    core_dust: selectedMaterial === "core_dust" ? 1 : 0,
+                    unused: input.initialStock,
+                },
+                dailyLog: [],
             },
         };
     }
-    const addedHours = GROWTH_SUPPLY_BOX_HOURS_CHOICES[selectedMaterial];
-    const addedMaterials = addedHours * autoIncomePerHour[selectedMaterial];
-    const daily = createEmptyMaterialMap();
-    daily[selectedMaterial] = addedMaterials;
+    const remainingState = { ...remaining };
+    const usedCountByMaterial = {
+        battle_data: 0,
+        credit: 0,
+        core_dust: 0,
+    };
+    const dailyLog = [];
+    let stock = input.initialStock;
+    let day = 0;
+    while (true) {
+        const currentOverallDays = calculateOverallGoalDaysFromState(remainingState, provisionalTotalDaily);
+        if (currentOverallDays != null && currentOverallDays <= 0) {
+            break;
+        }
+        day += 1;
+        stock += 1;
+        let usedThisDay = false;
+        while (stock > 0) {
+            const stockBefore = stock;
+            let bestAction = "unused";
+            let bestDays = null;
+            const actions = [
+                "unused",
+                "battle_data",
+                "credit",
+                "core_dust",
+            ];
+            for (const action of actions) {
+                const actionDaily = action === "unused"
+                    ? createEmptyMaterialMap()
+                    : getGrowthSupplyBoxGainByMaterial(autoIncomePerHour, action);
+                const candidateRemaining = action === "unused"
+                    ? remainingState
+                    : maxMaterialMapWithZero(subtractMaterialMaps(remainingState, actionDaily));
+                const candidateDays = calculateOverallGoalDaysFromState(candidateRemaining, provisionalTotalDaily);
+                const shouldReplace = bestDays == null
+                    ? candidateDays != null
+                    : candidateDays == null
+                        ? false
+                        : candidateDays < bestDays ||
+                            (candidateDays === bestDays &&
+                                compareGrowthSupplyBoxActionPriority(action, bestAction) < 0);
+                if (shouldReplace) {
+                    bestAction = action;
+                    bestDays = candidateDays;
+                }
+            }
+            if (bestAction === "unused") {
+                break;
+            }
+            const gain = getGrowthSupplyBoxGainByMaterial(autoIncomePerHour, bestAction);
+            const nextRemaining = maxMaterialMapWithZero(subtractMaterialMaps(remainingState, gain));
+            remainingState.battle_data = nextRemaining.battle_data;
+            remainingState.credit = nextRemaining.credit;
+            remainingState.core_dust = nextRemaining.core_dust;
+            stock -= 1;
+            usedCountByMaterial[bestAction] += 1;
+            usedThisDay = true;
+            dailyLog.push({
+                day,
+                action: bestAction,
+                stockBefore,
+                stockAfter: stock,
+            });
+            const afterBoxDays = calculateOverallGoalDaysFromState(remainingState, provisionalTotalDaily);
+            if (afterBoxDays != null && afterBoxDays <= 0) {
+                break;
+            }
+        }
+        if (!usedThisDay) {
+            dailyLog.push({
+                day,
+                action: "unused",
+                stockBefore: stock,
+                stockAfter: stock,
+            });
+        }
+        const nextRemainingAfterDaily = maxMaterialMapWithZero(subtractMaterialMaps(remainingState, provisionalTotalDaily));
+        remainingState.battle_data = nextRemainingAfterDaily.battle_data;
+        remainingState.credit = nextRemainingAfterDaily.credit;
+        remainingState.core_dust = nextRemainingAfterDaily.core_dust;
+        const afterOverallDays = calculateOverallGoalDaysFromState(remainingState, provisionalTotalDaily);
+        if (afterOverallDays != null && afterOverallDays <= 0) {
+            break;
+        }
+        if (day > 5000) {
+            break;
+        }
+    }
+    const totalUsed = usedCountByMaterial.battle_data +
+        usedCountByMaterial.credit +
+        usedCountByMaterial.core_dust;
+    const totalDays = day || 1;
+    const averageDaily = mapMaterials((material) => {
+        const gainPerBox = autoIncomePerHour[material] * GROWTH_SUPPLY_BOX_HOURS_CHOICES[material];
+        return (usedCountByMaterial[material] * gainPerBox) / totalDays;
+    });
     return {
-        daily,
+        daily: averageDaily,
         result: {
             enabled: true,
             mode: input.mode,
-            selectedMaterial,
-            addedHours,
-            addedMaterials,
+            selectedMaterial: null,
+            addedHours: 0,
+            addedMaterials: 0,
+            initialStock: input.initialStock,
+            usedCountByMaterial,
+            allocationSummary: {
+                battle_data: usedCountByMaterial.battle_data,
+                credit: usedCountByMaterial.credit,
+                core_dust: usedCountByMaterial.core_dust,
+                unused: input.initialStock + totalDays - totalUsed,
+            },
+            dailyLog,
         },
     };
 }
@@ -391,9 +565,8 @@ function buildMaterialResult(material, params, goalDays) {
         shopDirect: params.shopDirectMaterials[material],
         shopCaseHoursDaily: params.shopCaseHoursDaily[material],
         shopDaily: params.shopDaily[material],
-        growthSupplyBoxHours: params.growthSupplyBoxResult.selectedMaterial === material
-            ? params.growthSupplyBoxResult.addedHours
-            : 0,
+        growthSupplyBoxHours: params.growthSupplyBoxResult.usedCountByMaterial[material] *
+            GROWTH_SUPPLY_BOX_HOURS_CHOICES[material],
         growthSupplyBoxDaily: params.growthSupplyBoxDaily[material],
         totalDaily: params.totalDaily[material],
         daysToGoal: goalDays[material].days,
@@ -530,7 +703,58 @@ export function formatRoundedPeriod(value) {
     }
     return parts.join("");
 }
-export function toDisplayMaterialRow(material, result) {
+function calculateMilestoneRows(input, masterData, effectiveOwned, totalDaily) {
+    const rows = [];
+    let cumulativeRequired = createEmptyMaterialMap();
+    let previousRoundedDays = null;
+    for (let level = input.currentSyncLevel; level < input.targetSyncLevel; level += 1) {
+        const nextLevel = level + 1;
+        const cost = masterData.levelRequirements.find((r) => r.level === nextLevel);
+        if (!cost) {
+            continue;
+        }
+        const costMap = {
+            battle_data: cost.battle_data,
+            credit: cost.credit,
+            core_dust: cost.core_dust,
+        };
+        cumulativeRequired = sumMaterialMaps(cumulativeRequired, costMap);
+        if (nextLevel % 10 !== 1) {
+            continue;
+        }
+        const remaining = calculateRemainingMaterials(cumulativeRequired, effectiveOwned);
+        const materialDays = MATERIAL_KEYS.map((material) => {
+            const remain = remaining[material];
+            const daily = totalDaily[material];
+            if (remain <= 0) {
+                return 0;
+            }
+            if (daily <= 0) {
+                return null;
+            }
+            return remain / daily;
+        });
+        const hasUnreachable = materialDays.some((days) => days == null);
+        const rawDays = hasUnreachable ? null : Math.max(...materialDays);
+        const roundedDays = roundUpDays(rawDays);
+        const deltaDays = roundedDays == null
+            ? null
+            : previousRoundedDays == null
+                ? null
+                : roundedDays - previousRoundedDays;
+        rows.push({
+            level: nextLevel,
+            days: roundedDays,
+            daysText: roundedDays == null ? "達成不可" : formatNumber(roundedDays, 0),
+            periodText: roundedDays == null ? "達成不可" : `${roundedDays}日`,
+            deltaDays,
+            deltaPeriodText: deltaDays == null ? "-" : `${deltaDays}日`,
+        });
+        previousRoundedDays = roundedDays;
+    }
+    return rows;
+}
+export function toDisplayMaterialRow(material, result, growthSupplyBoxResult) {
     return {
         key: material,
         label: MATERIAL_LABELS[material],
@@ -550,6 +774,7 @@ export function toDisplayMaterialRow(material, result) {
         shopDaily: result.shopDaily,
         growthSupplyBoxHours: result.growthSupplyBoxHours,
         growthSupplyBoxDaily: result.growthSupplyBoxDaily,
+        growthSupplyBoxUsedCount: growthSupplyBoxResult.usedCountByMaterial[material],
         totalDaily: result.totalDaily,
         daysToGoal: result.daysToGoal,
         daysToGoalText: formatDays(result.daysToGoal),
@@ -559,6 +784,16 @@ export function toDisplayMaterialRow(material, result) {
     };
 }
 export function toDisplaySummary(summary) {
+    const box = summary.growthSupplyBox;
+    const allocationSummaryText = `バトルデータ ${box.allocationSummary.battle_data}個 / クレジット ${box.allocationSummary.credit}個 / コアダスト ${box.allocationSummary.core_dust}個 / 未使用 ${box.allocationSummary.unused}個`;
+    const dailyLogText = box.dailyLog.length === 0
+        ? "なし"
+        : box.dailyLog
+            .map((row) => {
+            const actionLabel = row.action === "unused" ? "使用なし" : MATERIAL_LABELS[row.action];
+            return `Day ${row.day}: ${actionLabel}（${row.stockBefore}→${row.stockAfter}）`;
+        })
+            .join("\n");
     return {
         overallDaysToGoal: summary.overallDaysToGoal,
         overallDaysToGoalText: formatDays(summary.overallDaysToGoal),
@@ -570,31 +805,40 @@ export function toDisplaySummary(summary) {
         bottleneckMaterials: [...summary.bottleneckMaterials],
         bottleneckLabels: summary.bottleneckMaterials.map((material) => MATERIAL_LABELS[material]),
         growthSupplyBox: {
-            enabled: summary.growthSupplyBox.enabled,
-            modeLabel: summary.growthSupplyBox.mode === "fixed"
-                ? "選択した素材に固定"
-                : "到達日数が最も長い素材へ配分",
-            selectedLabel: summary.growthSupplyBox.selectedMaterial == null
-                ? "なし"
-                : MATERIAL_LABELS[summary.growthSupplyBox.selectedMaterial],
-            addedHoursText: `${formatNumber(summary.growthSupplyBox.addedHours, 2)}時間`,
-            addedMaterialsText: formatNumber(summary.growthSupplyBox.addedMaterials, 2),
-            usedBoxCountText: !summary.growthSupplyBox.enabled ||
-                summary.growthSupplyBox.selectedMaterial == null
-                ? "0個"
-                : `${formatNumber(summary.growthSupplyBox.addedHours /
-                    GROWTH_SUPPLY_BOX_HOURS_CHOICES[summary.growthSupplyBox.selectedMaterial], 0)}個`,
+            enabled: box.enabled,
+            modeLabel: box.mode === "fixed" ? "選択した素材に固定" : "最適配分",
+            selectedLabel: box.selectedMaterial == null ? "なし" : MATERIAL_LABELS[box.selectedMaterial],
+            addedHoursText: `${formatNumber(box.addedHours, 2)}時間`,
+            addedMaterialsText: formatNumber(box.addedMaterials, 2),
+            usedBoxCountText: `${formatNumber(box.usedCountByMaterial.battle_data +
+                box.usedCountByMaterial.credit +
+                box.usedCountByMaterial.core_dust, 0)}個`,
+            initialStockText: `${formatNumber(box.initialStock, 0)}個`,
+            allocationSummaryText,
+            dailyLogText,
         },
     };
 }
-export function toDisplayResult(result) {
+export function toDisplayResult(result, input, masterData) {
+    const effectiveOwned = {
+        battle_data: result.materials.battle_data.effectiveOwned,
+        credit: result.materials.credit.effectiveOwned,
+        core_dust: result.materials.core_dust.effectiveOwned,
+    };
+    const totalDaily = {
+        battle_data: result.materials.battle_data.totalDaily,
+        credit: result.materials.credit.totalDaily,
+        core_dust: result.materials.core_dust.totalDaily,
+    };
     return {
-        rows: MATERIAL_KEYS.map((material) => toDisplayMaterialRow(material, result.materials[material])),
+        rows: MATERIAL_KEYS.map((material) => toDisplayMaterialRow(material, result.materials[material], result.summary.growthSupplyBox)),
         summary: toDisplaySummary(result.summary),
+        milestoneRows: calculateMilestoneRows(input, masterData, effectiveOwned, totalDaily),
     };
 }
 export function calculateDisplayResult(input, masterData) {
-    return toDisplayResult(calculateSyncLevelPlan(input, masterData));
+    const result = calculateSyncLevelPlan(input, masterData);
+    return toDisplayResult(result, input, masterData);
 }
 export function calculateDisplayResultSafe(input, masterData) {
     const response = calculateSyncLevelPlanSafe(input, masterData);
@@ -603,7 +847,7 @@ export function calculateDisplayResultSafe(input, masterData) {
     }
     return {
         ok: true,
-        displayResult: toDisplayResult(response.result),
+        displayResult: toDisplayResult(response.result, input, masterData),
     };
 }
 /**
@@ -614,20 +858,22 @@ export function buildDebugLog(display) {
     for (const row of display.rows) {
         lines.push(`\n[${row.label}]\n`);
         lines.push(`必要量: ${row.required}\n`);
-        lines.push(`直接保有: ${row.ownedDirect}\n`);
-        lines.push(`ケース換算: ${row.ownedCaseHours}h × 時給(${row.autoHourly}) = ${row.ownedConvertedFromCases}\n`);
+        lines.push(`-保有素材計算-\n`);
+        lines.push(`直接保有分: ${row.ownedDirect}\n`);
+        lines.push(`ケース保有分: ${row.ownedCaseHours}h × 時給(${row.autoHourly}) = ${row.ownedConvertedFromCases}\n`);
         if (row.shopDirect > 0) {
-            lines.push(`商品直接加算: ${row.shopDirect}\n`);
+            lines.push(`課金直接加算: ${row.shopDirect}\n`);
         }
         lines.push(`実質保有: ${row.effectiveOwned}\n`);
         lines.push(`残必要量: ${row.remaining}\n`);
-        lines.push(`基本日次: ${row.autoHourly} × 24 = ${row.baseDaily}\n`);
-        lines.push(`殲滅日次: ${row.wipeoutDaily}\n`);
+        lines.push(`-日次獲得計算-\n`);
+        lines.push(`基本: ${row.autoHourly} × 24 = ${row.baseDaily}\n`);
+        lines.push(`殲滅: ${row.wipeoutDaily}\n`);
         if (row.dailyPlayRewardHours > 0) {
             lines.push(`デイリープレイ: ${row.dailyPlayRewardHours}h × ${row.autoHourly} = ${row.dailyPlayRewardDaily}\n`);
         }
         if (row.shopCaseHoursDaily > 0 || row.shopDaily > 0) {
-            lines.push(`商品日次: ${row.shopCaseHoursDaily}h × ${row.autoHourly} = ${row.shopDaily}\n`);
+            lines.push(`課金: ${row.shopCaseHoursDaily}h × ${row.autoHourly} = ${row.shopDaily}\n`);
         }
         if (row.growthSupplyBoxHours > 0) {
             lines.push(`30-day補給箱: ${row.growthSupplyBoxHours}h × ${row.autoHourly} = ${row.growthSupplyBoxDaily}\n`);

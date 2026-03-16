@@ -264,8 +264,9 @@ function buildInputFromForm(): SyncLevelPlanInput {
     ownedCaseCounts: readOwnedCaseCounts(),
     growthSupplyBox: {
       enabled: getCheckboxValue("enableGrowthSupplyBox"),
-      mode: getSelectValue("growthSupplyBoxMode") as "fixed" | "days_priority",
+      mode: getSelectValue("growthSupplyBoxMode") as "fixed" | "optimal_allocation",
       fixedTarget: getSelectValue("growthSupplyBoxFixedTarget") as MaterialKey,
+      initialStock: getNumberInputValue("growthSupplyBoxInitialStock"),
     },
     selectedShopItemIds: readSelectedShopItemIds(),
   };
@@ -298,6 +299,7 @@ function fillFormFromInput(input: SyncLevelPlanInput): void {
   setCheckboxValue("enableGrowthSupplyBox", input.growthSupplyBox.enabled);
   setInputValue("growthSupplyBoxMode", input.growthSupplyBox.mode);
   setInputValue("growthSupplyBoxFixedTarget", input.growthSupplyBox.fixedTarget);
+  setInputValue("growthSupplyBoxInitialStock", input.growthSupplyBox.initialStock);
   for (const item of SHOP_ITEMS) {
     setCheckboxValue(
       getShopItemCheckboxId(item.id),
@@ -326,12 +328,19 @@ function hideResult(): void {
   const summaryBox = document.getElementById("summaryBox");
   const table = document.getElementById("resultTable");
   const tbody = document.getElementById("resultTableBody");
+  const milestoneTable = document.getElementById("milestoneTable");
+  const milestoneTableBody = document.getElementById("milestoneTableBody");
 
   summaryBox?.classList.add("hidden");
   table?.classList.add("hidden");
+  milestoneTable?.classList.add("hidden");
 
   if (tbody) {
     tbody.innerHTML = "";
+  }
+
+  if (milestoneTableBody) {
+    milestoneTableBody.innerHTML = "";
   }
 }
 
@@ -339,10 +348,30 @@ function renderSummary(displayResult: DisplayResult): void {
   const summaryBox = document.getElementById("summaryBox");
   if (!summaryBox) return;
 
+  const box = displayResult.summary.growthSupplyBox;
+
   summaryBox.classList.remove("hidden");
   summaryBox.innerHTML = `
-    <div><strong>総合到達日数:</strong> ${displayResult.summary.overallPeriodText}</div>
-    <div><strong>ボトルネック素材:</strong> ${displayResult.summary.bottleneckLabels.join(", ")}</div>
+    <div class="summary-main">
+      <div class="summary-main-label">総合到達日数</div>
+      <div class="summary-main-value">${displayResult.summary.overallPeriodText}</div>
+    </div>
+    <div class="summary-sub">
+      <strong>ボトルネック素材:</strong> ${displayResult.summary.bottleneckLabels.join(", ")}
+    </div>
+    <div class="summary-sub">
+      <strong>30-day成長補給箱:</strong> ${box.modeLabel}
+    </div>
+    <div class="summary-sub">
+      <strong>初期保持:</strong> ${box.initialStockText}
+    </div>
+    <div class="summary-sub">
+      <strong>最適配分:</strong> ${box.allocationSummaryText}
+    </div>
+    <details class="summary-log-details">
+      <summary class="summary-log-summary">日ごとの配分ログ</summary>
+      <div class="summary-sub summary-log-body">${box.dailyLogText}</div>
+    </details>
   `;
 }
 
@@ -350,26 +379,37 @@ function renderTable(displayResult: DisplayResult): void {
   const table = document.getElementById("resultTable");
   const tbody = document.getElementById("resultTableBody");
 
-  if (!table || !tbody) return;
+  if (!(table instanceof HTMLTableElement) || !(tbody instanceof HTMLTableSectionElement)) {
+    return;
+  }
 
   table.classList.remove("hidden");
   tbody.innerHTML = "";
 
-  const growthSupplyBoxSummary = displayResult.summary.growthSupplyBox;
+  const materialOrder: Record<string, number> = {
+    battle_data: 0,
+    credit: 1,
+    core_dust: 2,
+  };
 
-  for (const row of displayResult.rows) {
+  const sortedRows = [...displayResult.rows].sort(
+    (a, b) => (materialOrder[a.key] ?? 999) - (materialOrder[b.key] ?? 999),
+  );
+
+  for (const row of sortedRows) {
     const tr = document.createElement("tr");
+
+    if (displayResult.summary.bottleneckMaterials.includes(row.key)) {
+      tr.classList.add("bottleneck-row");
+    }
 
     const periodText =
       row.roundedUpDaysToGoal == null
         ? "達成不可"
         : `${row.roundedUpDaysToGoal}日（${row.roundedUpPeriodText}）`;
 
-    const growthSupplyBoxText =
-      row.growthSupplyBoxHours > 0
-        ? growthSupplyBoxSummary.usedBoxCountText
-        : "0個";
-
+    const growthSupplyBoxText = `${row.growthSupplyBoxUsedCount}個`;
+    
     tr.innerHTML = `
       <td>${row.label}</td>
       <td>${periodText}</td>
@@ -378,6 +418,37 @@ function renderTable(displayResult: DisplayResult): void {
 
     tbody.appendChild(tr);
   }
+}
+
+function renderMilestoneTable(displayResult: DisplayResult): void {
+  const table = document.getElementById("milestoneTable");
+  const tbody = document.getElementById("milestoneTableBody");
+
+  if (!(table instanceof HTMLTableElement) || !(tbody instanceof HTMLTableSectionElement)) {
+    return;
+  }
+
+  tbody.innerHTML = "";
+
+  if (displayResult.milestoneRows.length === 0) {
+    table.classList.add("hidden");
+    return;
+  }
+
+  for (const row of displayResult.milestoneRows) {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${row.level}</td>
+      <td>${row.daysText}</td>
+      <td>${row.periodText}</td>
+      <td>${row.deltaPeriodText}</td>
+    `;
+
+    tbody.appendChild(tr);
+  }
+
+  table.classList.remove("hidden");
 }
 
 function updateGrowthSupplyBoxFixedTargetVisibility(): void {
@@ -417,6 +488,7 @@ function calculateAndRender(): void {
 
   renderSummary(response.displayResult);
   renderTable(response.displayResult);
+  renderMilestoneTable(response.displayResult);
 
   const debugBox = document.getElementById("debugBox");
   if (debugBox) {
@@ -426,9 +498,6 @@ function calculateAndRender(): void {
 
 function initialize(): void {
   renderShopItems();
-
-  const initialInput = createDefaultSyncLevelPlanInput();
-  fillFormFromInput(initialInput);
 
   const dailyDescription = document.getElementById("dailyPlayRewardDescription");
   if (dailyDescription) {
@@ -443,10 +512,12 @@ function initialize(): void {
   }
 
   const calculateButton = document.getElementById("calculateButton");
+  const headerCalculateButton = document.getElementById("headerCalculateButton");
   const growthSupplyBoxCheckbox = document.getElementById("enableGrowthSupplyBox");
   const growthSupplyBoxMode = document.getElementById("growthSupplyBoxMode");
 
   calculateButton?.addEventListener("click", calculateAndRender);
+  headerCalculateButton?.addEventListener("click", calculateAndRender);
   growthSupplyBoxCheckbox?.addEventListener("change", updateGrowthSupplyBoxFixedTargetVisibility);
   growthSupplyBoxMode?.addEventListener("change", updateGrowthSupplyBoxFixedTargetVisibility);
 

@@ -11,11 +11,12 @@ export interface CaseCountMap {
     case24h: number;
 }
 export type MaterialCaseCountMap = Record<MaterialKey, CaseCountMap>;
-export type GrowthSupplyBoxMode = "fixed" | "days_priority";
+export type GrowthSupplyBoxMode = "fixed" | "optimal_allocation";
 export interface GrowthSupplyBoxInput {
     enabled: boolean;
     mode: GrowthSupplyBoxMode;
     fixedTarget: MaterialKey;
+    initialStock: number;
 }
 export interface SyncLevelPlanInput {
     currentSyncLevel: number;
@@ -51,12 +52,28 @@ export interface GoalDayInfo {
     days: number | null;
     reachable: boolean;
 }
+export interface GrowthSupplyBoxDailyLogRow {
+    day: number;
+    action: MaterialKey | "unused";
+    stockBefore: number;
+    stockAfter: number;
+}
+export interface GrowthSupplyBoxAllocationSummary {
+    battle_data: number;
+    credit: number;
+    core_dust: number;
+    unused: number;
+}
 export interface GrowthSupplyBoxResult {
     enabled: boolean;
     mode: GrowthSupplyBoxMode;
     selectedMaterial: MaterialKey | null;
     addedHours: number;
     addedMaterials: number;
+    initialStock: number;
+    usedCountByMaterial: Record<MaterialKey, number>;
+    allocationSummary: GrowthSupplyBoxAllocationSummary;
+    dailyLog: GrowthSupplyBoxDailyLogRow[];
 }
 export interface MaterialResult {
     required: number;
@@ -126,6 +143,7 @@ export interface DisplayMaterialRow {
     shopDaily: number;
     growthSupplyBoxHours: number;
     growthSupplyBoxDaily: number;
+    growthSupplyBoxUsedCount: number;
     totalDaily: number;
     daysToGoal: number | null;
     daysToGoalText: string;
@@ -148,13 +166,32 @@ export interface DisplaySummary {
         addedHoursText: string;
         addedMaterialsText: string;
         usedBoxCountText: string;
+        initialStockText: string;
+        allocationSummaryText: string;
+        dailyLogText: string;
     };
+}
+export interface DisplayMilestoneRow {
+    level: number;
+    days: number | null;
+    daysText: string;
+    periodText: string;
+    deltaDays: number | null;
+    deltaPeriodText: string;
 }
 export interface DisplayResult {
     rows: DisplayMaterialRow[];
     summary: DisplaySummary;
+    milestoneRows: DisplayMilestoneRow[];
 }
 export declare const DAILY_PLAY_REWARD_HOURS: MaterialMap;
+export interface MilestoneRow {
+    level: number;
+    days: number;
+    periodText: string;
+    deltaDays: number | null;
+    deltaPeriodText: string;
+}
 export declare const DAILY_PLAY_REWARD_DESCRIPTION = "\n\u5185\u8A33\uFF1A\u30AF\u30EC\u30B8\u30C3\u30C838.4\u6642\u9593\u5206\u3001\u30D0\u30C8\u30EB\u30C7\u30FC\u30BF47.14\u6642\u9593\u5206\u3001\u30B3\u30A2\u30C0\u30B9\u30C849.15\u6642\u9593\u5206<br>\n\u30C7\u30A4\u30EA\u30FC\u30D7\u30EC\u30A4\u5831\u916C\u3068\u306F\u3001\u5404\u30B3\u30F3\u30C6\u30F3\u30C4\u306B\u3088\u308B\u53CE\u5165\u306E\u898B\u8FBC\u307F\u3092\u4E00\u65E5\u5F53\u305F\u308A\u306B\u5747\u3057\u305F\u3082\u306E\u3067\u3059\u3002<br>\n\u542B\u3080\u30B3\u30F3\u30C6\u30F3\u30C4\u306F\u4EE5\u4E0B\u3002\n<ul>\n<li>\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u30EB\u30FC\u30E0lv5</li>\n<li>\u30A2\u30AB\u30C7\u30DF\u30FC\u5168\u958B\u653E</li>\n<li>\u30C7\u30A4\u30EA\u30FC\u30DF\u30C3\u30B7\u30E7\u30F3</li>\n<li>\u30A6\u30A3\u30FC\u30AF\u30EA\u30FC\u30DF\u30C3\u30B7\u30E7\u30F3</li>\n<li>\u30A4\u30D9\u30F3\u30C8\u30C7\u30A4\u30EA\u30FC\u30ED\u30B0\u30A4\u30F3</li>\n<li>\u30A4\u30D9\u30F3\u30C8\u30B7\u30E7\u30C3\u30D7</li>\n<li>\u30A4\u30D9\u30F3\u30C8\u30B9\u30C6\u30FC\u30B8\u5831\u916C</li>\n<li>\u5354\u540C\u4F5C\u6226\u30B7\u30E7\u30C3\u30D7</li>\n</ul>\n\u203Bnikke.gg\u53C2\u7167\n";
 export declare const GROWTH_SUPPLY_BOX_HOURS_CHOICES: MaterialMap;
 export declare function getMaterialKeys(): MaterialKey[];
@@ -221,9 +258,9 @@ export declare function formatNumber(value: number, fractionDigits?: number): st
 export declare function formatDays(value: number | null, fractionDigits?: number): string;
 export declare function roundUpDays(value: number | null): number | null;
 export declare function formatRoundedPeriod(value: number | null): string;
-export declare function toDisplayMaterialRow(material: MaterialKey, result: MaterialResult): DisplayMaterialRow;
+export declare function toDisplayMaterialRow(material: MaterialKey, result: MaterialResult, growthSupplyBoxResult: GrowthSupplyBoxResult): DisplayMaterialRow;
 export declare function toDisplaySummary(summary: SummaryResult): DisplaySummary;
-export declare function toDisplayResult(result: SyncLevelPlanResult): DisplayResult;
+export declare function toDisplayResult(result: SyncLevelPlanResult, input: SyncLevelPlanInput, masterData: MasterData): DisplayResult;
 export declare function calculateDisplayResult(input: SyncLevelPlanInput, masterData: MasterData): DisplayResult;
 export type DisplayCalculationResponse = CalculationFailure | {
     ok: true;
