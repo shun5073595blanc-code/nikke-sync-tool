@@ -3,959 +3,409 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NIKKE シンクロレベル計算</title>
-      <style>
-        :root {
-          color-scheme: dark;
+    <link rel="stylesheet" href="./styles.css">
+    <title>NIKKE シンクロレベルシミュレーター</title>
 
-          --bg: #111;
-          --panel: #1b1b1b;
-          --panel-soft: #171717;
-          --panel-head: #202020;
-          --panel-input: #222;
-          --panel-code: #141414;
-
-          --text: #f5f5f5;
-          --text-muted: #d0d0d0;
-          --text-soft: #cfcfcf;
-          --text-subtle: #bbb;
-
-          --border: #333;
-          --border-soft: #2c2c2c;
-          --border-input: #555;
-
-          --accent: #8ab4ff;
-          --focus: #6aa9ff;
-
-          --error-border: #7a2c2c;
-          --error-bg: #3a1717;
-          --error-text: #ffd2d2;
-
-          --summary-border: #3b4f68;
-          --summary-bg: #16202a;
-          --summary-label: #b8c7d9;
-          --summary-sub: #d9e3ee;
-
-          --bottleneck-bg: #2a2020;
-          --bottleneck-text: #ffd3d3;
-
-          --radius-sm: 8px;
-          --radius-md: 10px;
-          --radius-lg: 12px;
-
-          --space-1: 4px;
-          --space-2: 6px;
-          --space-3: 8px;
-          --space-4: 10px;
-          --space-5: 12px;
-          --space-6: 14px;
-          --space-7: 16px;
-          --space-8: 20px;
-
-          --font-base: Arial, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
-          --font-mono: Consolas, Monaco, monospace;
-        }
-
-        * {
-          box-sizing: border-box;
-        }
-
-        html {
-          font-size: 14px;
-        }
-
-        body {
-          margin: 0;
-          background: var(--bg);
-          color: var(--text);
-          font-family: var(--font-base);
-        }
-
-        h1 {
-          margin: 0 0 16px;
-          font-size: 1.65rem;
-          line-height: 1.25;
-        }
-
-        h2 {
-          margin: 0 0 12px;
-          font-size: 1.1rem;
-          line-height: 1.3;
-        }
-
-        p {
-          margin: 0;
-        }
-
-        label {
-          font-size: 0.95rem;
-          line-height: 1.35;
-        }
-
-        .hidden {
-          display: none !important;
-        }
-
-        .container {
-          max-width: 1600px;
-          margin: 0 auto;
-          padding: 0 16px 16px 16px;
-        }
-
-        .app-layout {
-          display: grid;
-          grid-template-columns: 420px minmax(0, 1fr);
-          gap: 20px;
-          align-items: start;
-        }
-
-        .side-column {
-          overflow: visible;
-          align-self: start;
-        }
-
-        .side-sticky {
-          position: sticky;
-          top: 16px;
-          padding-right: 4px;
-        }
-
-        .side-actions,
-        .side-result-area,
-        .result-table-wrap,
-        .side-debug-area {
-          min-height: 0;
-        }
-
-        .side-result-area {
-          margin-top: 0;
-        }
-
-        .side-debug-area {
-          margin-top: 0;
-        }
-
-        .result-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.95fr);
-          gap: 16px;
-          align-items: start;
-        }
-
-        .result-left,
-        .result-right {
-          display: grid;
-          gap: 16px;
-          align-content: start;
-        }
-
-        .basic-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 16px;
-        }
-
-        .card {
-          margin-bottom: 16px;
-          padding: 14px;
-          background: var(--panel);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-        }
-
-        .row {
-          display: grid;
-          grid-template-columns: 200px minmax(0, 1fr);
-          gap: 10px;
-          align-items: center;
-          margin-bottom: 10px;
-        }
-
-        .row:last-child {
-          margin-bottom: 0;
-        }
-
-        input,
-        select,
-        button {
-          width: 100%;
-          min-width: 0;
-          padding: 8px 10px;
-          border: 1px solid var(--border-input);
-          border-radius: var(--radius-sm);
-          background: var(--panel-input);
-          color: #fff;
-          font: inherit;
-        }
-
-        select {
-          min-height: 40px;
-        }
-
-        input:focus,
-        select:focus,
-        button:focus {
-          outline: 2px solid var(--focus);
-          outline-offset: 1px;
-        }
-
-        button {
-          cursor: pointer;
-          font-weight: 700;
-        }
-
-        input[type="number"] {
-          text-align: right;
-        }
-
-        .actions {
-          margin-bottom: 12px;
-        }
-
-        .actions button {
-          min-height: 44px;
-        }
-
-        .section-title-check {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 10px;
-          cursor: pointer;
-        }
-
-        .section-title-check input[type="checkbox"] {
-          width: 18px;
-          height: 18px;
-          margin: 0;
-          flex: 0 0 auto;
-        }
-
-        .section-title-text {
-          margin: 0;
-          font-size: 1.1rem;
-          line-height: 1.3;
-        }
-
-        .inline-toggle-link {
-          display: inline-block;
-          margin-top: 2px;
-          color: var(--accent);
-          cursor: pointer;
-          font-size: 0.9rem;
-          user-select: none;
-        }
-
-        .inline-toggle-link:hover {
-          text-decoration: underline;
-        }
-
-        .description {
-          margin-top: 10px;
-          color: var(--text-muted);
-          font-size: 0.92rem;
-          line-height: 1.6;
-        }
-
-        .details-block,
-        .shop-category-block {
-          overflow: hidden;
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
-          background: var(--panel-soft);
-        }
-
-        .details-summary,
-        .log-summary {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          list-style: none;
-          cursor: pointer;
-          user-select: none;
-          padding: 12px 14px;
-          font-weight: 700;
-          background: var(--panel-head);
-        }
-
-        .details-summary::-webkit-details-marker,
-        .log-summary::-webkit-details-marker {
-          display: none;
-        }
-
-        .details-summary::before,
-        .log-summary::before {
-          content: "▸";
-          flex: 0 0 auto;
-          font-size: 12px;
-          color: var(--accent);
-          transition: transform 0.15s ease;
-        }
-
-        .details-summary::after,
-        .log-summary::after,
-        .toggle-state > summary::after {
-          margin-left: 2px;
-          font-size: 0.85rem;
-          color: var(--text-subtle);
-        }
-
-        details[open] > .details-summary::before,
-        details[open] > .log-summary::before {
-          transform: rotate(90deg);
-        }
-
-        details[open] > .details-summary::after,
-        .toggle-state[open] > summary::after {
-          content: "（展開中）";
-        }
-
-        details:not([open]) > .details-summary::after,
-        .toggle-state:not([open]) > summary::after {
-          content: "（収納中）";
-        }
-
-        .details-content {
-          padding: 14px;
-        }
-
-        .resource-table,
-        .result-table {
-          width: 100%;
-          table-layout: fixed;
-          border-collapse: collapse;
-          background: var(--panel);
-        }
-
-        .resource-table th,
-        .resource-table td,
-        .result-table th,
-        .result-table td {
-          padding: 8px;
-          border: 1px solid var(--border);
-          vertical-align: middle;
-          word-break: break-word;
-          overflow-wrap: anywhere;
-        }
-
-        .resource-table th,
-        .result-table th {
-          background: #242424;
-          font-weight: 700;
-        }
-
-        .resource-table th:first-child,
-        .resource-table td:first-child,
-        .result-table th:first-child,
-        .result-table td:first-child {
-          text-align: left;
-        }
-
-        .resource-table td input {
-          padding: 7px 8px;
-        }
-
-        .result-table {
-          margin-top: 12px;
-          margin-bottom: 12px;
-        }
-
-        .summary {
-          margin-top: 12px;
-          padding: 14px;
-          border: 1px solid var(--summary-border);
-          border-radius: var(--radius-lg);
-          background: var(--summary-bg);
-          line-height: 1.7;
-        }
-
-        .summary-main {
-          margin-bottom: 8px;
-        }
-
-        .summary-main-label {
-          font-size: 0.82rem;
-          color: var(--summary-label);
-          letter-spacing: 0.04em;
-        }
-
-        .summary-main-value {
-          margin-top: 4px;
-          font-size: 1.5rem;
-          font-weight: 800;
-          line-height: 1.2;
-          color: #fff;
-        }
-
-        .summary-sub {
-          font-size: 0.95rem;
-          color: var(--summary-sub);
-        }
-
-        .error {
-          margin-bottom: 12px;
-          padding: 12px 14px;
-          border: 1px solid var(--error-border);
-          border-radius: var(--radius-md);
-          background: var(--error-bg);
-          color: var(--error-text);
-          line-height: 1.6;
-        }
-
-        .log-card {
-          /* margin-top: 16px; */
-          margin-bottom: 0;
-          padding: 0;
-          overflow: hidden;
-        }
-
-        #debugBox {
-          max-height: 40vh;
-          max-width: 100%;
-          margin: 0;
-          padding: 12px 14px 14px;
-          overflow: auto;
-          white-space: pre-wrap;
-          word-break: break-word;
-          overflow-wrap: anywhere;
-          background: var(--panel-code);
-          font-family: var(--font-mono);
-          font-size: 0.85rem;
-          line-height: 1.55;
-        }
-
-        #shopItemsContainer {
-          display: grid;
-          gap: 14px;
-          margin-top: 12px;
-        }
-
-        .shop-category-title {
-          margin: 0;
-          padding: 10px 12px;
-          font-size: 1rem;
-          font-weight: 700;
-          background: var(--panel-head);
-          border-bottom: 1px solid var(--border);
-        }
-
-        .shop-item-row {
-          display: grid;
-          grid-template-columns: 22px minmax(0, 1fr);
-          gap: 10px;
-          align-items: start;
-          padding: 12px;
-          border-top: 1px solid var(--border-soft);
-        }
-
-        .shop-item-row:first-child {
-          border-top: none;
-        }
-
-        .shop-item-row input[type="checkbox"] {
-          width: 18px;
-          height: 18px;
-          margin-top: 2px;
-        }
-
-        .shop-item-title {
-          margin: 0 0 6px;
-          font-weight: 700;
-          line-height: 1.4;
-        }
-
-        .shop-item-description {
-          color: var(--text-soft);
-          font-size: 0.9rem;
-          line-height: 1.6;
-        }
-
-        .result-table .bottleneck-row td {
-          background: var(--bottleneck-bg);
-        }
-
-        .result-table .bottleneck-row td:first-child {
-          font-weight: 700;
-          color: var(--bottleneck-text);
-        }
-
-        @media (max-width: 1000px) {
-          html {
-            font-size: 13px;
-          }
-
-          body {
-            padding: 0 12px 12px 12px;
-          }
-
-          .app-layout {
-            grid-template-columns: 1fr;
-            gap: 16px;
-          }
-
-          .side-sticky {
-            position: static;
-            height: auto;
-            display: block;
-          }
-
-          .side-result-area,
-          .result-table-wrap {
-            overflow: visible;
-          }
-
-          .side-debug-area {
-            display: block;
-          }
-
-          .card {
-            padding: 12px;
-            margin-bottom: 14px;
-          }
-
-          .row {
-            grid-template-columns: 1fr;
-            gap: 6px;
-          }
-
-          h1 {
-            margin-bottom: 14px;
-            font-size: 1.4rem;
-          }
-
-          h2,
-          .section-title-text {
-            font-size: 1rem;
-          }
-
-          .details-summary,
-          .log-summary {
-            padding: 10px 12px;
-          }
-
-          .details-content {
-            padding: 12px;
-          }
-
-          .resource-table,
-          .result-table {
-            font-size: 0.85rem;
-          }
-
-          .resource-table th,
-          .resource-table td,
-          .result-table th,
-          .result-table td {
-            padding: 6px;
-          }
-
-          .resource-table td input {
-            padding: 6px;
-            font-size: 0.85rem;
-          }
-
-          .description,
-          .shop-item-description,
-          .inline-toggle-link,
-          #debugBox {
-            font-size: 0.82rem;
-          }
-
-          #debugBox {
-            height: auto;
-            max-height: 40vh;
-          }
-
-          .result-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-          }
-
-          .result-right {
-            order: -1;
-          }
-
-          .side-result-area {
-            order: -2;
-          }
-        }
-
-        @media (max-width: 640px) {
-          html {
-            font-size: 12px;
-          }
-
-          body {
-            padding: 0 10px 10px 10px;
-          }
-
-          .card {
-            padding: 10px;
-          }
-
-          .resource-table,
-          .result-table {
-            font-size: 0.8rem;
-          }
-
-          .resource-table th,
-          .resource-table td,
-          .result-table th,
-          .result-table td {
-            padding: 5px;
-          }
-
-          .actions button {
-            min-height: 40px;
-          }
-
-          #debugBox {
-            font-size: 0.78rem;
-            line-height: 1.5;
-          }
-
-          .summary-main-value {
-            font-size: 1.3rem;
-          }
-        }
-
-        .app-header {
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          padding: 12px 0;
-          background: var(--bg);
-        }
-
-        .app-header h1 {
-          margin: 0;
-        }
-
-        #headerCalculateButton {
-          width: auto;
-          min-width: 180px;
-          margin-right: auto;
-          margin-left: 180px;
-        }
-
-        @media (min-width: 1001px) {
-          .app-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-
-            position: sticky;
-            top: 0;
-            z-index: 100;
-
-            padding: 12px 0;
-            background: var(--bg);
-          }
-
-          .side-column .actions {
-            display: none;
-          }
-        }
-
-        @media (max-width: 1000px) {
-          .app-header {
-            display: block;
-          }
-
-          #headerCalculateButton {
-            display: none;
-          }
-        }
-        .summary-log-details {
-          margin-top: 8px;
-          border-top: 1px solid var(--summary-border);
-          padding-top: 8px;
-        }
-
-        .summary-log-summary {
-          cursor: pointer;
-          font-size: 0.95rem;
-          font-weight: 700;
-          color: var(--summary-sub);
-        }
-
-        .summary-log-body {
-          margin-top: 8px;
-          white-space: pre-wrap;
-        }
-
-        #calculateButton {
-          width: 100%;
-          font-size: 1.2rem;
-          font-weight: 700;
-          padding: 14px 16px;
-          border-radius: 8px;
-          border: none;
-          background: #3a3d42;
-          color: white;
-          cursor: pointer;
-          transition: background 0.15s, transform 0.05s;
-        }
-
-        #headerCalculateButton {
-          font-size: 1.2rem;
-          font-weight: 700;
-          border-radius: 8px;
-          border: none;
-          background: #3a3d42;
-          color: white;
-          cursor: pointer;
-          transition: background 0.15s, transform 0.05s;
-        }
-
-        #calculateButton:hover,
-        #headerCalculateButton:hover {
-          background: #242629;
-        }
-
-        #calculateButton:active,
-        #headerCalculateButton:active {
-          transform: translateY(1px);
-        }
-
-      </style>
   </head>
+  <script type="module" src="./src/app.js"></script>
   <body>
-    <div class="container">
-      <header class="app-header">
-        <h1>NIKKE シンクロレベルシミュレーター</h1>
-        <button id="headerCalculateButton" type="button">計算する</button>
+    <div class="page">
+
+      <!-- ヘッダー -->
+      <header class="page-header">
+        <div>
+          <h1>NIKKE シンクロレベルシミュレーター</h1>
+          <div style="font-size:12px;color:#666;">
+            目標達成までの時間を計算するツール
+          </div>
+        </div>
+        <button id="headerCalculateButton">計算する</button>
       </header>
 
-      <div class="app-layout">
-        <main class="main-column">
-          <div class="basic-grid">
-            <section class="card">
-              <h2>基本</h2>
-              <div class="row">
-                <label for="currentSyncLevel">現在のシンクロレベル</label>
-                <input id="currentSyncLevel" type="number" min="1" step="1" />
-              </div>
-              <div class="row">
-                <label for="targetSyncLevel">目標のシンクロレベル</label>
-                <input id="targetSyncLevel" type="number" min="1" step="1" />
-              </div>
-              <div class="row">
-                <label for="baseDefenseLevel">基地防衛レベル</label>
-                <input id="baseDefenseLevel" type="number" min="1" step="1" />
-              </div>
-              <div class="row">
-                <label for="wipeoutCount">まとめて殲滅</label>
-                <select id="wipeoutCount">
-                  <option value="0">0</option>
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-                  <option value="6">6</option>
-                  <option value="7">7</option>
-                  <option value="8">8</option>
-                  <option value="9">9</option>
-                  <option value="10">10</option>
-                  <option value="11">11</option>
-                </select>
-              </div>
-            </section>
+      <!-- ステータス -->
+      <section class="ui-card">
+        <div class="section-heading">
+          <h2>Base Info</h2>
+        </div>
+
+        <div class="status-grid">
+          <div class="field">
+            <label for="currentSyncLevel">現在のレベル</label>
+            <input id="currentSyncLevel" type="number" min="1" step="1" />
           </div>
 
-          <section class="card">
-            <details class="details-block toggle-state" open>
-              <summary class="details-summary">保有素材</summary>
-              <div class="details-content">
-                <table class="resource-table">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>バトルデータ</th>
-                      <th>クレジット</th>
-                      <th>コアダスト</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>素材</td>
-                      <td><input id="ownedDirectBattleData" type="number" min="0" step="1" /></td>
-                      <td><input id="ownedDirectCredit" type="number" min="0" step="1" /></td>
-                      <td><input id="ownedDirectCoreDust" type="number" min="0" step="1" /></td>
-                    </tr>
-                    <tr>
-                      <td>1hケース</td>
-                      <td><input id="battleDataCase1h" type="number" min="0" step="1" /></td>
-                      <td><input id="creditCase1h" type="number" min="0" step="1" /></td>
-                      <td><input id="coreDustCase1h" type="number" min="0" step="1" /></td>
-                    </tr>
-                    <tr>
-                      <td>2hケース</td>
-                      <td><input id="battleDataCase2h" type="number" min="0" step="1" /></td>
-                      <td><input id="creditCase2h" type="number" min="0" step="1" /></td>
-                      <td><input id="coreDustCase2h" type="number" min="0" step="1" /></td>
-                    </tr>
-                    <tr>
-                      <td>4hケース</td>
-                      <td><input id="battleDataCase4h" type="number" min="0" step="1" /></td>
-                      <td><input id="creditCase4h" type="number" min="0" step="1" /></td>
-                      <td><input id="coreDustCase4h" type="number" min="0" step="1" /></td>
-                    </tr>
-                    <tr>
-                      <td>8hケース</td>
-                      <td><input id="battleDataCase8h" type="number" min="0" step="1" /></td>
-                      <td><input id="creditCase8h" type="number" min="0" step="1" /></td>
-                      <td><input id="coreDustCase8h" type="number" min="0" step="1" /></td>
-                    </tr>
-                    <tr>
-                      <td>12hケース</td>
-                      <td><input id="battleDataCase12h" type="number" min="0" step="1" /></td>
-                      <td><input id="creditCase12h" type="number" min="0" step="1" /></td>
-                      <td><input id="coreDustCase12h" type="number" min="0" step="1" /></td>
-                    </tr>
-                    <tr>
-                      <td>24hケース</td>
-                      <td><input id="battleDataCase24h" type="number" min="0" step="1" /></td>
-                      <td><input id="creditCase24h" type="number" min="0" step="1" /></td>
-                      <td><input id="coreDustCase24h" type="number" min="0" step="1" /></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </section>
+          <div class="field">
+            <label for="targetSyncLevel">目標レベル</label>
+            <input id="targetSyncLevel" type="number" min="1" step="1" />
+          </div>
 
-          <section class="card">
-            <label class="section-title-check">
+          <div class="field">
+            <label for="baseDefenseLevel">基地防衛レベル</label>
+            <input id="baseDefenseLevel" type="number" min="1" step="1" />
+          </div>
+
+          <div class="field">
+            <label for="wipeoutCount">手動獲得回数（0〜11回）</label>
+            <select id="wipeoutCount"></select>
+          </div>
+        </div>
+
+        <div class="status-options">
+          <div class="option-row">
+            <div class="option-main">
+              <span class="option-label">デイリープレイ報酬</span>
+              <button
+                type="button"
+                class="help-button"
+                data-help-target="dailyPlayHelp"
+                aria-label="デイリープレイ報酬の説明を表示"
+                aria-expanded="false"
+              >?</button>
+            </div>
+
+            <label class="switch">
               <input id="enableDailyPlayReward" type="checkbox" />
-              <h2 class="section-title-text">デイリープレイ報酬</h2>
+              <span class="switch-slider"></span>
             </label>
-            <div
-              class="inline-toggle-link"
-              data-toggle-target="dailyPlayRewardDescription"
-            >
-              デイリープレイ報酬について＞
+          </div>
+
+          <div id="dailyPlayHelp" class="help-panel hidden">
+            デイリープレイ報酬を計算に含めます。毎日の活動で得られる追加資源を反映したい場合にONにしてください。<br>
+            デイリープレイ報酬とは、各コンテンツによる収入の見込みを日ごとに均したものです。含むコンテンツは以下。<br>
+            ・シミュレーションルームlv5<br>
+            ・アカデミー全開放<br>
+            ・デイリーミッション<br>
+            ・ウィークリーミッション<br>
+            ・イベントデイリーログイン<br>
+            ・イベントショップ<br>
+            ・イベントステージ報酬<br>
+            ・協同作戦ショップ<br>
+            ※nikke.gg参照
+          </div>
+
+          <div class="option-row">
+            <div class="option-main">
+              <span class="option-label">30-day成長補給箱</span>
+              <button
+                type="button"
+                class="help-button"
+                data-help-target="growthSupplyHelp"
+                aria-label="30-day成長補給箱の説明を表示"
+                aria-expanded="false"
+              >?</button>
             </div>
 
-            <div
-              id="dailyPlayRewardDescription"
-              class="description collapsible-content hidden"
-            ></div>
-          </section>
-
-          <section class="card">
-            <label class="section-title-check">
+            <label class="switch">
               <input id="enableGrowthSupplyBox" type="checkbox" />
-              <h2 class="section-title-text">30-day成長補給箱</h2>
+              <span class="switch-slider"></span>
             </label>
-            <div
-              class="inline-toggle-link"
-              data-toggle-target="growthSupplyBoxDescription"
-            >
-              30-day成長補給箱について＞
+          </div>
+
+          <div id="growthSupplyHelp" class="help-panel hidden">
+            30-day成長補給箱を計算に含めます。ONにすると、下の補給箱設定に応じて追加獲得分を計算します。<br>
+            固定配分：指定した素材にのみ使用します。<br>
+            最適配分：最終的な日数が最も短くなるように使用します。<br>
+          </div>
+        </div>
+        <div id="growthSupplyBoxSection" class="hidden" style="margin-top: 12px;">
+          <div class="status-grid">
+            <div class="field">
+              <label for="growthSupplyBoxMode">補給箱モード</label>
+              <select id="growthSupplyBoxMode">
+                <option value="fixed">固定配分</option>
+                <option value="optimal_allocation">最適配分</option>
+              </select>
             </div>
 
-            <div
-              id="growthSupplyBoxDescription"
-              class="description collapsible-content hidden"
-            >
-              補給箱は 1日1回使用できます。<br />
-              選択した素材に固定 は文字通り指定素材へ固定配分、最適配分 は総合到達日数が最も短くなるように配分します。<br />
-              クレジット30時間分、バトルデータ10時間分、コアダスト10時間分のいずれか1つを選択して獲得します。
+            <div class="field">
+              <label for="growthSupplyBoxFixedTarget">固定配分の対象素材</label>
+              <select id="growthSupplyBoxFixedTarget">
+                <option value="battle_data">バトルデータ</option>
+                <option value="credit">クレジット</option>
+                <option value="core_dust">コアダスト</option>
+              </select>
             </div>
 
-            <div id="growthSupplyBoxConfig" class="hidden">
-              <div class="row">
-                <label for="growthSupplyBoxMode">使用方法</label>
-                <select id="growthSupplyBoxMode">
-                  <option value="fixed">選択した素材に固定</option>
-                  <option value="optimal_allocation">最適配分</option>
-                </select>
-              </div>
-
-              <div id="growthSupplyBoxFixedTargetRow" class="row">
-                <label for="growthSupplyBoxFixedTarget">固定対象素材</label>
-                <select id="growthSupplyBoxFixedTarget">
-                  <option value="battle_data">バトルデータ</option>
-                  <option value="credit">クレジット</option>
-                  <option value="core_dust">コアダスト</option>
-                </select>
-              </div>
-              <div class="row">
-                <label for="growthSupplyBoxInitialStock">現在保持している補給箱数</label>
-                <input id="growthSupplyBoxInitialStock" type="number" min="0" step="1" value="0" />
-              </div>
-            </div>
-          </section>
-
-          <section class="card">
-            <details class="details-block toggle-state">
-              <summary class="details-summary">課金</summary>
-              <div class="details-content">
-                <div class="description">
-                  対象商品をチェックしてください。各商品はカテゴリごとに繰り返し購入するものとして扱います。
-                </div>
-                <div id="shopItemsContainer"></div>
-              </div>
-            </details>
-          </section>
-        </main>
-
-        <aside class="side-column">
-          <div class="side-sticky">
-            <div class="side-actions">
-              <div class="actions">
-                <button id="calculateButton" type="button">計算する</button>
-              </div>
-              <div id="errorBox" class="error hidden"></div>
-            </div>
-
-            <div class="result-grid">
-              <div class="result-left">
-                <div class="result-table-wrap">
-                  <table id="resultTable" class="result-table hidden">
-                    <thead>
-                      <tr>
-                        <th>素材</th>
-                        <th>到達までの期間</th>
-                        <th>30-day成長補給箱</th>
-                      </tr>
-                    </thead>
-                    <tbody id="resultTableBody"></tbody>
-                  </table>
-                </div>
-
-                <div class="result-table-wrap">
-                  <table id="milestoneTable" class="result-table hidden">
-                    <thead>
-                      <tr>
-                        <th>到達レベル</th>
-                        <th>到達までの日数</th>
-                        <th>期間</th>
-                        <th>前レベルからの経過</th>
-                      </tr>
-                    </thead>
-                    <tbody id="milestoneTableBody"></tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div class="result-right">
-                <div class="side-result-area">
-                  <div id="summaryBox" class="summary hidden"></div>
-                </div>
-
-                <details class="card log-card side-debug-area" id="debugDetails">
-                  <summary class="log-summary">計算ログ（検証用）</summary>
-                  <pre id="debugBox"></pre>
-                </details>
-              </div>
+            <div class="field">
+              <label for="growthSupplyBoxInitialStock">初期保持数</label>
+              <input id="growthSupplyBoxInitialStock" type="number" min="0" step="1" />
             </div>
           </div>
-        </aside>
-      </div>
+        </div>
+      </section>
+
+      <!-- 保有素材 -->
+      <section class="ui-card">
+        <h2>保有素材</h2>
+
+        <div class="segmented-tabs">
+          <button class="segmented-tabs__tab is-active" data-tab="bd" data-type="battle">
+            バトルデータ
+          </button>
+          <button class="segmented-tabs__tab" data-tab="cr" data-type="credit">
+            クレジット
+          </button>
+          <button class="segmented-tabs__tab" data-tab="cd" data-type="core">
+            コアダスト
+          </button>
+        </div>
+
+        <div class="tab-panel is-active" data-panel="bd">
+          <div class="material-input-grid">
+            <div class="material-field">
+              <label for="ownedDirectBattleData">現在所持数</label>
+              <input id="ownedDirectBattleData" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="battleDataCase1h">1hケース</label>
+              <input id="battleDataCase1h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="battleDataCase2h">2hケース</label>
+              <input id="battleDataCase2h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="battleDataCase4h">4hケース</label>
+              <input id="battleDataCase4h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="battleDataCase8h">8hケース</label>
+              <input id="battleDataCase8h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="battleDataCase12h">12hケース</label>
+              <input id="battleDataCase12h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="battleDataCase24h">24hケース</label>
+              <input id="battleDataCase24h" type="number" min="0" step="1" />
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="cr">
+          <div class="material-input-grid">
+            <div class="material-field">
+              <label for="ownedDirectCredit">現在所持数</label>
+              <input id="ownedDirectCredit" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="creditCase1h">1hケース</label>
+              <input id="creditCase1h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="creditCase2h">2hケース</label>
+              <input id="creditCase2h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="creditCase4h">4hケース</label>
+              <input id="creditCase4h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="creditCase8h">8hケース</label>
+              <input id="creditCase8h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="creditCase12h">12hケース</label>
+              <input id="creditCase12h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="creditCase24h">24hケース</label>
+              <input id="creditCase24h" type="number" min="0" step="1" />
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="cd">
+          <div class="material-input-grid">
+            <div class="material-field">
+              <label for="ownedDirectCoreDust">現在所持数</label>
+              <input id="ownedDirectCoreDust" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="coreDustCase1h">1hケース</label>
+              <input id="coreDustCase1h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="coreDustCase2h">2hケース</label>
+              <input id="coreDustCase2h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="coreDustCase4h">4hケース</label>
+              <input id="coreDustCase4h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="coreDustCase8h">8hケース</label>
+              <input id="coreDustCase8h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="coreDustCase12h">12hケース</label>
+              <input id="coreDustCase12h" type="number" min="0" step="1" />
+            </div>
+            <div class="material-field">
+              <label for="coreDustCase24h">24hケース</label>
+              <input id="coreDustCase24h" type="number" min="0" step="1" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 購買ラインナップ -->
+      <section class="ui-card">
+        <div class="section-heading">
+          <h2>購買ラインナップ</h2>
+        </div>
+
+        <div class="segmented-tabs" role="tablist" aria-label="購買ラインナップタブ">
+          <button
+            type="button"
+            class="segmented-tabs__tab is-active"
+            data-tab-group="shop-category"
+            data-tab-target="shop-daily-panel"
+            aria-selected="true"
+          >
+            デイリー
+          </button>
+          <button
+            type="button"
+            class="segmented-tabs__tab"
+            data-tab-group="shop-category"
+            data-tab-target="shop-weekly-panel"
+            aria-selected="false"
+          >
+            ウィークリー
+          </button>
+          <button
+            type="button"
+            class="segmented-tabs__tab"
+            data-tab-group="shop-category"
+            data-tab-target="shop-monthly-panel"
+            aria-selected="false"
+          >
+            マンスリー
+          </button>
+        </div>
+
+        <div class="tab-panels">
+          <div
+            id="shop-daily-panel"
+            class="tab-panel is-active"
+            data-tab-panel="shop-category"
+          >
+            <div id="shopItemsDailyContainer"></div>
+          </div>
+
+          <div
+            id="shop-weekly-panel"
+            class="tab-panel"
+            data-tab-panel="shop-category"
+          >
+            <div id="shopItemsWeeklyContainer"></div>
+          </div>
+
+          <div
+            id="shop-monthly-panel"
+            class="tab-panel"
+            data-tab-panel="shop-category"
+            >
+            <div id="shopItemsMonthlyContainer"></div>
+          </div>
+        </div>
+      </section>
+      
+      <section class="ui-card">
+        <button id="calculateButton">計算する</button>
+      </section>
+
+      <section id="errorBox" class="ui-card hidden"></section>
+      
+      <!-- 結果 -->
+      <div id="summaryBox" class="hero-summary hidden"></div>
+
+      <section class="ui-card">
+        <div class="section-heading">
+          <h2>素材別結果表</h2>
+        </div>
+
+        <table id="resultTable" class="result-table hidden">
+          <thead>
+            <tr>
+              <th>素材</th>
+              <th>必要量</th>
+              <th>現在保有</th>
+              <th>購入からの獲得</th>
+              <th>自動獲得</th>
+              <th>必要日数</th>
+            </tr>
+          </thead>
+          <tbody id="resultTableBody"></tbody>
+        </table>
+      </section>
+
+      <section class="ui-card">
+        <div class="section-heading">
+          <h2>節目到達表</h2>
+          <p>一行目が次の節目レベルです</p>
+        </div>
+
+        <table id="milestoneTable" class="result-table hidden">
+          <thead>
+            <tr>
+              <th>到達レベル</th>
+              <th>到達までの日数</th>
+              <th>期間</th>
+              <th>前レベルからの経過</th>
+            </tr>
+          </thead>
+          <tbody id="milestoneTableBody"></tbody>
+        </table>
+      </section>
+
+      <section id="growthSupplyBoxSummaryCard" class="ui-card hidden">
+        <div class="section-heading">
+          <h2>補給箱詳細</h2>
+        </div>
+        <div id="growthSupplyBoxSummaryContent"></div>
+      </section>
+    
+      <section class="ui-card">
+        <details>
+          <summary>計算ログ（検証用）</summary>
+          <pre id="debugBox"></pre>
+        </details>
+      </section>
+      
     </div>
-    <script type="module" src="./src/app.js"></script>
+
+    <!-- タブJS -->
+    <script>
+      document.querySelectorAll(".segmented-tabs__tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const tab = btn.dataset.tab;
+
+          btn.parentElement.querySelectorAll("button").forEach(b => b.classList.remove("is-active"));
+          btn.classList.add("is-active");
+
+          const section = btn.closest(".ui-card");
+          section.querySelectorAll(".tab-panel").forEach(p => {
+            p.classList.toggle("is-active", p.dataset.panel === tab);
+          });
+        });
+      });
+    </script>
+    <script>
+      document.querySelectorAll(".help-button").forEach(button => {
+        button.addEventListener("click", () => {
+          const targetId = button.dataset.helpTarget;
+          const panel = document.getElementById(targetId);
+          if (!panel) return;
+
+          const isOpen = !panel.classList.contains("hidden");
+          panel.classList.toggle("hidden", isOpen);
+          button.setAttribute("aria-expanded", String(!isOpen));
+        });
+      });
+    </script>
+
   </body>
 </html>

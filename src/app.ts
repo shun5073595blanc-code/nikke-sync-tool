@@ -59,25 +59,6 @@ function setCheckboxValue(id: string, checked: boolean): void {
   element.checked = checked;
 }
 
-function toggleHiddenById(id: string): void {
-  const element = document.getElementById(id);
-  if (!element) return;
-
-  element.classList.toggle("hidden");
-}
-
-function initializeInlineToggles(): void {
-  const toggles = document.querySelectorAll<HTMLElement>("[data-toggle-target]");
-
-  for (const toggle of toggles) {
-    toggle.addEventListener("click", () => {
-      const targetId = toggle.dataset.toggleTarget;
-      if (!targetId) return;
-      toggleHiddenById(targetId);
-    });
-  }
-}
-
 function getShopItemCheckboxId(itemId: string): string {
   return `shopItem_${itemId}`;
 }
@@ -88,80 +69,73 @@ const MATERIAL_LABELS: Record<string, string> = {
   core_dust: "コアダスト",
 };
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function readSelectedShopItemIds(): string[] {
   return SHOP_ITEMS
-    .filter((item) => getCheckboxValue(getShopItemCheckboxId(item.id)))
+    .filter((item) => {
+      const checkbox = document.getElementById(getShopItemCheckboxId(item.id)) as HTMLInputElement | null;
+      return checkbox?.checked ?? false;
+    })
     .map((item) => item.id);
 }
 
 function renderShopItems(): void {
-  const container = document.getElementById("shopItemsContainer");
-  if (!container) return;
+  const dailyContainer = document.getElementById("shopItemsDailyContainer");
+  const weeklyContainer = document.getElementById("shopItemsWeeklyContainer");
+  const monthlyContainer = document.getElementById("shopItemsMonthlyContainer");
 
-  container.innerHTML = "";
+  if (!dailyContainer || !weeklyContainer || !monthlyContainer) {
+    return;
+  }
 
-  const categoryLabels: Record<"daily" | "weekly" | "monthly", string> = {
-    daily: "デイリー",
-    weekly: "ウィークリー",
-    monthly: "マンスリー",
-  };
+  dailyContainer.innerHTML = "";
+  weeklyContainer.innerHTML = "";
+  monthlyContainer.innerHTML = "";
 
-  const grouped = {
-    daily: SHOP_ITEMS.filter((item) => item.category === "daily"),
-    weekly: SHOP_ITEMS.filter((item) => item.category === "weekly"),
-    monthly: SHOP_ITEMS.filter((item) => item.category === "monthly"),
-  };
+  const containerMap = {
+    daily: dailyContainer,
+    weekly: weeklyContainer,
+    monthly: monthlyContainer,
+  } as const;
 
-  for (const category of ["daily", "weekly", "monthly"] as const) {
-    const items = grouped[category];
-    if (items.length === 0) continue;
+  for (const item of SHOP_ITEMS) {
+    const row = document.createElement("label");
+    row.className = "shop-item-row";
+    row.htmlFor = getShopItemCheckboxId(item.id);
 
-    const section = document.createElement("details");
-    section.className = "details-block nested-details";
-    section.open = category === "daily";
+    const rewardParts: string[] = [];
 
-    const title = document.createElement("summary");
-    title.className = "details-summary";
-    title.textContent = categoryLabels[category];
-    section.appendChild(title);
-
-    const content = document.createElement("div");
-    content.className = "details-content";
-
-    for (const item of items) {
-      const row = document.createElement("label");
-      row.className = "shop-item-row";
-      row.htmlFor = getShopItemCheckboxId(item.id);
-
-      const rewardParts: string[] = [];
-
-      for (const [material, value] of Object.entries(item.reward.direct)) {
-        if (value > 0) {
-          const label = MATERIAL_LABELS[material] ?? material;
-          rewardParts.push(`${label}: 直接 ${formatNumber(value, 0)}`);
-        }
+    for (const [material, value] of Object.entries(item.reward.direct)) {
+      if (value > 0) {
+        const label = MATERIAL_LABELS[material] ?? material;
+        rewardParts.push(`${label}: 直接 ${formatNumber(value, 0)}`);
       }
-
-      for (const [material, value] of Object.entries(item.reward.caseCounts1h)) {
-        if (value > 0) {
-          const label = MATERIAL_LABELS[material] ?? material;
-          rewardParts.push(`${label}: 1hケース ${formatNumber(value, 0)}個`);
-        }
-      }
-
-      row.innerHTML = `
-        <input id="${getShopItemCheckboxId(item.id)}" type="checkbox" />
-        <div class="shop-item-content">
-          <div class="shop-item-name">${item.name}</div>
-          <div class="shop-item-reward">${rewardParts.join(" / ")}</div>
-        </div>
-      `;
-
-      content.appendChild(row);
     }
 
-    section.appendChild(content);
-    container.appendChild(section);
+    for (const [material, value] of Object.entries(item.reward.caseCounts1h)) {
+      if (value > 0) {
+        const label = MATERIAL_LABELS[material] ?? material;
+        rewardParts.push(`${label}: 1hケース ${formatNumber(value, 0)}個`);
+      }
+    }
+
+    row.innerHTML = `
+      <input id="${getShopItemCheckboxId(item.id)}" type="checkbox" />
+      <div class="shop-item-content">
+        <div class="shop-item-name">${escapeHtml(item.name)}</div>
+        <div class="shop-item-reward">${escapeHtml(rewardParts.join(" / "))}</div>
+      </div>
+    `;
+
+    containerMap[item.category].appendChild(row);
   }
 }
 
@@ -173,14 +147,17 @@ function buildDirectMaterialInputIds(): Record<MaterialKey, string> {
   };
 }
 
-function buildCaseInputIds(): Record<MaterialKey, {
-  case1h: string;
-  case2h: string;
-  case4h: string;
-  case8h: string;
-  case12h: string;
-  case24h: string;
-}> {
+function buildCaseInputIds(): Record<
+  MaterialKey,
+  {
+    case1h: string;
+    case2h: string;
+    case4h: string;
+    case8h: string;
+    case12h: string;
+    case24h: string;
+  }
+> {
   return {
     battle_data: {
       case1h: "battleDataCase1h",
@@ -300,11 +277,12 @@ function fillFormFromInput(input: SyncLevelPlanInput): void {
   setInputValue("growthSupplyBoxMode", input.growthSupplyBox.mode);
   setInputValue("growthSupplyBoxFixedTarget", input.growthSupplyBox.fixedTarget);
   setInputValue("growthSupplyBoxInitialStock", input.growthSupplyBox.initialStock);
+
   for (const item of SHOP_ITEMS) {
-    setCheckboxValue(
-      getShopItemCheckboxId(item.id),
-      input.selectedShopItemIds.includes(item.id),
-    );
+    const checkbox = document.getElementById(getShopItemCheckboxId(item.id)) as HTMLInputElement | null;
+    if (checkbox) {
+      checkbox.checked = input.selectedShopItemIds.includes(item.id);
+    }
   }
 }
 
@@ -313,7 +291,7 @@ function showError(messages: string[]): void {
   if (!errorBox) return;
 
   errorBox.classList.remove("hidden");
-  errorBox.textContent = messages.join("\n");
+  errorBox.innerHTML = messages.map((message) => `<div>${escapeHtml(message)}</div>`).join("");
 }
 
 function hideError(): void {
@@ -321,26 +299,33 @@ function hideError(): void {
   if (!errorBox) return;
 
   errorBox.classList.add("hidden");
-  errorBox.textContent = "";
+  errorBox.innerHTML = "";
 }
 
 function hideResult(): void {
   const summaryBox = document.getElementById("summaryBox");
-  const table = document.getElementById("resultTable");
-  const tbody = document.getElementById("resultTableBody");
+  const resultTable = document.getElementById("resultTable");
+  const resultTableBody = document.getElementById("resultTableBody");
   const milestoneTable = document.getElementById("milestoneTable");
   const milestoneTableBody = document.getElementById("milestoneTableBody");
+  const growthSupplyBoxSummaryCard = document.getElementById("growthSupplyBoxSummaryCard");
+  const growthSupplyBoxSummaryContent = document.getElementById("growthSupplyBoxSummaryContent");
 
   summaryBox?.classList.add("hidden");
-  table?.classList.add("hidden");
+  resultTable?.classList.add("hidden");
   milestoneTable?.classList.add("hidden");
+  growthSupplyBoxSummaryCard?.classList.add("hidden");
 
-  if (tbody) {
-    tbody.innerHTML = "";
+  if (resultTableBody) {
+    resultTableBody.innerHTML = "";
   }
 
   if (milestoneTableBody) {
     milestoneTableBody.innerHTML = "";
+  }
+
+  if (growthSupplyBoxSummaryContent) {
+    growthSupplyBoxSummaryContent.innerHTML = "";
   }
 }
 
@@ -348,29 +333,46 @@ function renderSummary(displayResult: DisplayResult): void {
   const summaryBox = document.getElementById("summaryBox");
   if (!summaryBox) return;
 
-  const box = displayResult.summary.growthSupplyBox;
-
   summaryBox.classList.remove("hidden");
   summaryBox.innerHTML = `
     <div class="summary-main">
       <div class="summary-main-label">総合到達日数</div>
-      <div class="summary-main-value">${displayResult.summary.overallPeriodText}</div>
+      <div class="summary-main-value">${escapeHtml(displayResult.summary.overallPeriodText)}</div>
     </div>
     <div class="summary-sub">
-      <strong>ボトルネック素材:</strong> ${displayResult.summary.bottleneckLabels.join(", ")}
+      ボトルネック素材: ${escapeHtml(displayResult.summary.bottleneckLabels.join(", "))}
     </div>
-    <div class="summary-sub">
-      <strong>30-day成長補給箱:</strong> ${box.modeLabel}
-    </div>
-    <div class="summary-sub">
-      <strong>初期保持:</strong> ${box.initialStockText}
-    </div>
-    <div class="summary-sub">
-      <strong>最適配分:</strong> ${box.allocationSummaryText}
+  `;
+}
+
+function renderGrowthSupplyBoxSummary(displayResult: DisplayResult): void {
+  const card = document.getElementById("growthSupplyBoxSummaryCard");
+  const content = document.getElementById("growthSupplyBoxSummaryContent");
+
+  if (!card || !content) return;
+
+  const box = displayResult.summary.growthSupplyBox;
+
+  if (!box.enabled) {
+    card.classList.add("hidden");
+    content.innerHTML = "";
+    return;
+  }
+
+  card.classList.remove("hidden");
+  content.innerHTML = `
+    <div class="growth-summary-list">
+      <div><strong>モード:</strong> ${escapeHtml(box.modeLabel)}</div>
+      <div><strong>選択素材:</strong> ${escapeHtml(box.selectedLabel)}</div>
+      <div><strong>初期保持:</strong> ${escapeHtml(box.initialStockText)}</div>
+      <div><strong>追加時間:</strong> ${escapeHtml(box.addedHoursText)}</div>
+      <div><strong>追加素材量:</strong> ${escapeHtml(box.addedMaterialsText)}</div>
+      <div><strong>使用箱数:</strong> ${escapeHtml(box.usedBoxCountText)}</div>
+      <div><strong>最適配分:</strong> ${escapeHtml(box.allocationSummaryText)}</div>
     </div>
     <details class="summary-log-details">
       <summary class="summary-log-summary">日ごとの配分ログ</summary>
-      <div class="summary-sub summary-log-body">${box.dailyLogText}</div>
+      <div class="summary-log-body">${escapeHtml(box.dailyLogText)}</div>
     </details>
   `;
 }
@@ -403,17 +405,32 @@ function renderTable(displayResult: DisplayResult): void {
       tr.classList.add("bottleneck-row");
     }
 
-    const periodText =
+    const roundedDays = row.roundedUpDaysToGoal ?? 0;
+    const currentOwned = row.effectiveOwned;
+    const purchasedTotal = row.shopDirect + row.shopDaily * roundedDays;
+    const autoTotal =
+      (row.baseDaily + row.wipeoutDaily + row.dailyPlayRewardDaily + row.growthSupplyBoxDaily) *
+      roundedDays;
+
+    const dayText =
       row.roundedUpDaysToGoal == null
         ? "達成不可"
-        : `${row.roundedUpDaysToGoal}日（${row.roundedUpPeriodText}）`;
+        : `${formatNumber(row.roundedUpDaysToGoal, 0)}日`;
 
-    const growthSupplyBoxText = `${row.growthSupplyBoxUsedCount}個`;
-    
     tr.innerHTML = `
-      <td>${row.label}</td>
-      <td>${periodText}</td>
-      <td>${growthSupplyBoxText}</td>
+      <td>
+        ${escapeHtml(row.label)}
+        ${
+          displayResult.summary.bottleneckMaterials.includes(row.key)
+            ? `<span class="result-bottleneck-badge">ボトルネック</span>`
+            : ""
+        }
+      </td>
+      <td>${escapeHtml(formatNumber(row.required, 0))}</td>
+      <td>${escapeHtml(formatNumber(currentOwned, 0))}</td>
+      <td>${escapeHtml(formatNumber(purchasedTotal, 0))}</td>
+      <td>${escapeHtml(formatNumber(autoTotal, 0))}</td>
+      <td>${escapeHtml(dayText)}</td>
     `;
 
     tbody.appendChild(tr);
@@ -439,10 +456,10 @@ function renderMilestoneTable(displayResult: DisplayResult): void {
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td>${row.level}</td>
-      <td>${row.daysText}</td>
-      <td>${row.periodText}</td>
-      <td>${row.deltaPeriodText}</td>
+      <td>Lv. ${escapeHtml(String(row.level))}</td>
+      <td>${escapeHtml(row.daysText)}</td>
+      <td>${escapeHtml(row.periodText)}</td>
+      <td>${escapeHtml(row.deltaPeriodText)}</td>
     `;
 
     tbody.appendChild(tr);
@@ -452,26 +469,76 @@ function renderMilestoneTable(displayResult: DisplayResult): void {
 }
 
 function updateGrowthSupplyBoxFixedTargetVisibility(): void {
-  const enabled = getCheckboxValue("enableGrowthSupplyBox");
-  const mode = getSelectValue("growthSupplyBoxMode");
+  const section = document.getElementById("growthSupplyBoxSection");
+  const enabledCheckbox = document.getElementById("enableGrowthSupplyBox") as HTMLInputElement | null;
+  const modeSelect = document.getElementById("growthSupplyBoxMode") as HTMLSelectElement | null;
+  const fixedTargetField = document.getElementById("growthSupplyBoxFixedTarget")?.closest(".field");
 
-  const configArea = document.getElementById("growthSupplyBoxConfig");
-  const fixedTargetRow = document.getElementById("growthSupplyBoxFixedTargetRow");
-
-  if (!configArea || !fixedTargetRow) return;
-
-  if (!enabled) {
-    configArea.classList.add("hidden");
-    fixedTargetRow.classList.add("hidden");
+  if (!section || !enabledCheckbox || !modeSelect) {
     return;
   }
 
-  configArea.classList.remove("hidden");
+  if (!enabledCheckbox.checked) {
+    section.classList.add("hidden");
+    if (fixedTargetField) {
+      fixedTargetField.classList.add("hidden");
+    }
+    return;
+  }
 
-  if (mode === "fixed") {
-    fixedTargetRow.classList.remove("hidden");
+  section.classList.remove("hidden");
+
+  if (modeSelect.value === "fixed") {
+    fixedTargetField?.classList.remove("hidden");
   } else {
-    fixedTargetRow.classList.add("hidden");
+    fixedTargetField?.classList.add("hidden");
+  }
+}
+
+function initializeSegmentedTabs(): void {
+  const tabs = document.querySelectorAll<HTMLElement>("[data-tab-group][data-tab-target]");
+
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      const group = tab.dataset.tabGroup;
+      const target = tab.dataset.tabTarget;
+
+      if (!group || !target) return;
+
+      const groupTabs = document.querySelectorAll<HTMLElement>(`[data-tab-group="${group}"]`);
+      const groupPanels = document.querySelectorAll<HTMLElement>(`[data-tab-panel="${group}"]`);
+
+      for (const groupTab of groupTabs) {
+        groupTab.classList.remove("is-active");
+        groupTab.setAttribute("aria-selected", "false");
+      }
+
+      for (const panel of groupPanels) {
+        panel.classList.remove("is-active");
+      }
+
+      tab.classList.add("is-active");
+      tab.setAttribute("aria-selected", "true");
+
+      const targetPanel = document.getElementById(target);
+      targetPanel?.classList.add("is-active");
+    });
+  }
+}
+
+function populateWipeoutOptions(): void {
+  const select = document.getElementById("wipeoutCount") as HTMLSelectElement | null;
+  if (!select) return;
+
+  if (select.options.length > 0) {
+    return;
+  }
+
+  for (let i = 0; i <= 11; i += 1) {
+    const option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = String(i);
+    select.appendChild(option);
   }
 }
 
@@ -489,6 +556,7 @@ function calculateAndRender(): void {
   renderSummary(response.displayResult);
   renderTable(response.displayResult);
   renderMilestoneTable(response.displayResult);
+  renderGrowthSupplyBoxSummary(response.displayResult);
 
   const debugBox = document.getElementById("debugBox");
   if (debugBox) {
@@ -497,6 +565,7 @@ function calculateAndRender(): void {
 }
 
 function initialize(): void {
+  populateWipeoutOptions();
   renderShopItems();
 
   const dailyDescription = document.getElementById("dailyPlayRewardDescription");
@@ -504,12 +573,10 @@ function initialize(): void {
     dailyDescription.innerHTML = DAILY_PLAY_REWARD_DESCRIPTION;
   }
 
-  initializeInlineToggles();
+  initializeSegmentedTabs();
 
-  const dailyPlayDescription = document.getElementById("dailyPlayRewardDescription");
-  if (dailyPlayDescription) {
-    dailyPlayDescription.innerHTML = DAILY_PLAY_REWARD_DESCRIPTION;
-  }
+  const initialInput = createDefaultSyncLevelPlanInput();
+  fillFormFromInput(initialInput);
 
   const calculateButton = document.getElementById("calculateButton");
   const headerCalculateButton = document.getElementById("headerCalculateButton");
@@ -523,7 +590,7 @@ function initialize(): void {
 
   updateGrowthSupplyBoxFixedTargetVisibility();
   hideResult();
+  hideError();
 }
 
 window.addEventListener("DOMContentLoaded", initialize);
-
